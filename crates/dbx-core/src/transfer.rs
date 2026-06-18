@@ -3113,17 +3113,6 @@ where
     Ok(total_transferred)
 }
 
-async fn query_mysql_create_table_ddl(
-    state: &AppState,
-    source_pool_key: &str,
-    source_schema: &str,
-    table: &str,
-) -> Result<String, String> {
-    let sql = format!("SHOW CREATE TABLE {}", qualified_table(table, source_schema, &DatabaseType::Mysql));
-    let rows = execute_on_pool(state, source_pool_key, &sql).await?.rows;
-    rows.first().and_then(|row| json_string_cell(row, 1)).ok_or_else(|| format!("Failed to get MySQL DDL: {sql}"))
-}
-
 pub async fn transfer_postgres_schema_dependencies<F>(
     state: &AppState,
     request: &TransferRequest,
