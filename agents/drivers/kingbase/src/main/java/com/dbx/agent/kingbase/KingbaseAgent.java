@@ -214,6 +214,62 @@ public final class KingbaseAgent extends PostgresLikeAgent {
     public List<ColumnInfo> getColumns(String schema, String table) {
         return unchecked(() -> {
             Set<String> primaryKeys = primaryKeys(schema, table);
+            if (!isMysqlCompatMode()) {
+                return getRegularColumns(schema, table, primaryKeys);
+            }
+            return getInformationSchemaColumns(schema, table, primaryKeys);
+        });
+    }
+
+    private List<ColumnInfo> getRegularColumns(String schema, String table, Set<String> primaryKeys) {
+        return unchecked(() -> {
+            List<ColumnInfo> result = new ArrayList<>();
+            String sql = "SELECT a.attname AS column_name, " +
+                "format_type(a.atttypid, a.atttypmod) AS data_type, " +
+                "NOT a.attnotnull AS is_nullable, " +
+                "sys_get_expr(ad.adbin, ad.adrelid) AS column_default, " +
+                "d.description AS column_comment, " +
+                "CASE WHEN t.typname = 'numeric' AND a.atttypmod > 0 " +
+                "THEN ((a.atttypmod - 4) >> 16) & 65535 ELSE NULL END AS numeric_precision, " +
+                "CASE WHEN t.typname = 'numeric' AND a.atttypmod > 0 " +
+                "THEN (a.atttypmod - 4) & 65535 ELSE NULL END AS numeric_scale, " +
+                "CASE WHEN t.typname IN ('varchar', 'bpchar') AND a.atttypmod > 0 " +
+                "THEN a.atttypmod - 4 ELSE NULL END AS character_maximum_length " +
+                "FROM sys_catalog.sys_attribute a " +
+                "JOIN sys_catalog.sys_type t ON t.oid = a.atttypid " +
+                "JOIN sys_catalog.sys_class c ON c.oid = a.attrelid " +
+                "JOIN sys_catalog.sys_namespace n ON n.oid = c.relnamespace " +
+                "LEFT JOIN sys_catalog.sys_attrdef ad ON ad.adrelid = a.attrelid AND ad.adnum = a.attnum " +
+                "LEFT JOIN sys_catalog.sys_description d ON d.objoid = a.attrelid AND d.objsubid = a.attnum " +
+                "WHERE n.nspname = " + sqlString(effectiveSchema(schema)) +
+                " AND c.relname = " + sqlString(table) + " " +
+                "AND a.attnum > 0 AND NOT a.attisdropped " +
+                "ORDER BY a.attnum";
+            try (Statement stmt = requireConnected().createStatement()) {
+                try (ResultSet rs = stmt.executeQuery(sql)) {
+                    while (rs.next()) {
+                        String columnName = rs.getString("column_name");
+                        result.add(new ColumnInfo(
+                            columnName,
+                            rs.getString("data_type"),
+                            rs.getBoolean("is_nullable"),
+                            rs.getString("column_default"),
+                            primaryKeys.contains(columnName),
+                            null,
+                            rs.getString("column_comment"),
+                            intObject(rs, "numeric_precision"),
+                            intObject(rs, "numeric_scale"),
+                            intObject(rs, "character_maximum_length")
+                        ));
+                    }
+                }
+            }
+            return result;
+        });
+    }
+
+    private List<ColumnInfo> getInformationSchemaColumns(String schema, String table, Set<String> primaryKeys) {
+        return unchecked(() -> {
             List<ColumnInfo> result = new ArrayList<>();
             String sql = "SELECT column_name, data_type, is_nullable, column_default, " +
                 "numeric_precision, numeric_scale, character_maximum_length " +

@@ -1,5 +1,6 @@
 package com.dbx.agent.kingbase;
 
+import com.dbx.agent.ColumnInfo;
 import com.dbx.agent.DatabaseAgent;
 import com.dbx.agent.DatabaseInfo;
 import com.dbx.agent.ObjectInfo;
@@ -168,6 +169,78 @@ class KingbaseAgentTest extends JdbcFakeExecutionBehaviorTest {
     }
 
     @Test
+    void regularGetColumnsUsesFormattedCatalogTypes() {
+        List<String> sql = new ArrayList<>();
+        KingbaseAgent agent = new KingbaseAgent();
+        TestSupport.setPrivateConnection(agent, preparedConnection(sql,
+            resultSet(
+                new String[]{"column_name"},
+                new Object[][]{{"id"}}
+            ),
+            resultSet(
+                new String[]{
+                    "column_name",
+                    "data_type",
+                    "is_nullable",
+                    "column_default",
+                    "column_comment",
+                    "numeric_precision",
+                    "numeric_scale",
+                    "character_maximum_length"
+                },
+                new Object[][]{
+                    {"id", "integer", false, "nextval('orders_id_seq'::regclass)", "identifier", 32, 0, null},
+                    {"create_time", "timestamp with time zone", true, null, null, null, null, null},
+                    {"name", "character varying(64)", true, null, "display name", null, null, 64}
+                }
+            )
+        ));
+
+        List<ColumnInfo> columns = agent.getColumns("public", "orders");
+
+        Assertions.assertEquals(3, columns.size());
+        Assertions.assertEquals("integer", columns.get(0).getData_type());
+        Assertions.assertTrue(columns.get(0).getIs_primary_key());
+        Assertions.assertFalse(columns.get(0).getIs_nullable());
+        Assertions.assertEquals("timestamp with time zone", columns.get(1).getData_type());
+        Assertions.assertNotEquals("USER-DEFINED", columns.get(1).getData_type());
+        Assertions.assertEquals(Integer.valueOf(64), columns.get(2).getCharacter_maximum_length());
+        Assertions.assertTrue(sql.get(1).contains("format_type(a.atttypid, a.atttypmod) AS data_type"), sql.get(1));
+        Assertions.assertTrue(sql.get(1).contains("FROM sys_catalog.sys_attribute"), sql.get(1));
+        Assertions.assertFalse(sql.get(1).contains("information_schema.columns"), sql.get(1));
+    }
+
+    @Test
+    void mysqlCompatGetColumnsKeepsInformationSchemaPath() {
+        List<String> sql = new ArrayList<>();
+        KingbaseAgent agent = new KingbaseAgent();
+        agent.setMysqlCompatMode(true);
+        TestSupport.setPrivateConnection(agent, preparedConnection(sql,
+            resultSet(
+                new String[]{"column_name"},
+                new Object[][]{{"id"}}
+            ),
+            resultSet(
+                new String[]{
+                    "column_name",
+                    "data_type",
+                    "is_nullable",
+                    "column_default",
+                    "numeric_precision",
+                    "numeric_scale",
+                    "character_maximum_length"
+                },
+                new Object[][]{{"id", "int", "NO", null, 32, 0, null}}
+            )
+        ));
+
+        List<ColumnInfo> columns = agent.getColumns("PUBLIC", "orders");
+
+        Assertions.assertEquals("int", columns.get(0).getData_type());
+        Assertions.assertTrue(sql.get(1).contains("FROM information_schema.columns"), sql.get(1));
+    }
+
+    @Test
     void mysqlCompatTimestampTypeNameIsReadAsTimestampText() throws Exception {
         Timestamp timestamp = Timestamp.valueOf("2026-06-22 11:29:00");
         KingbaseAgent agent = new KingbaseAgent();
@@ -243,6 +316,13 @@ class KingbaseAgentTest extends JdbcFakeExecutionBehaviorTest {
                         }
                     }
                     return null;
+                case "getBoolean":
+                    Object booleanValue = columnValue(columns, rows[index[0]], args[0]);
+                    if (booleanValue instanceof Boolean) return booleanValue;
+                    if (booleanValue instanceof Number) return ((Number) booleanValue).intValue() != 0;
+                    return Boolean.parseBoolean(String.valueOf(booleanValue));
+                case "getObject":
+                    return columnValue(columns, rows[index[0]], args[0]);
                 case "wasNull":
                     return false;
                 case "close":
@@ -251,6 +331,18 @@ class KingbaseAgentTest extends JdbcFakeExecutionBehaviorTest {
                     return defaultValue(method.getReturnType());
             }
         });
+    }
+
+    private static Object columnValue(String[] columns, Object[] row, Object key) {
+        if (key instanceof Number) {
+            return row[((Number) key).intValue() - 1];
+        }
+        for (int i = 0; i < columns.length; i++) {
+            if (columns[i].equalsIgnoreCase(String.valueOf(key))) {
+                return row[i];
+            }
+        }
+        return null;
     }
 
     private static ResultSet timestampResultSet(Timestamp timestamp) {
