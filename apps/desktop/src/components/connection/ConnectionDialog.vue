@@ -1367,7 +1367,7 @@ const visibleSchemaObjectSelection = computed(() => {
 const visibleSchemaSummary = computed(() => {
   const key = visibleSchemasDatabaseKey.value;
   const configured = form.value.visible_schemas?.[key];
-  if (!configured?.length) return t("visibleSchemas.showAll");
+  if (!Array.isArray(configured)) return t("visibleSchemas.showAll");
   return t("visibleSchemas.selectedCount", { selected: configured.length, total: visibleSchemaNames.value.length });
 });
 const hasVisibleObjectFilter = computed(() => (visibleFilterUsesSchemas.value ? Array.isArray(visibleSchemaObjectSelection.value) : hasVisibleDatabaseFilter.value));
@@ -4090,10 +4090,10 @@ function openExternalUrl(url: string) {
             <ListFilter v-else class="mr-1.5 h-4 w-4" />
             {{ hasVisibleObjectFilter ? visibleObjectSummary : visibleFilterUsesSchemas ? t("contextMenu.configureVisibleObjects") : t("contextMenu.selectVisibleDatabases") }}
           </Button>
-          <Button v-if="canChooseVisibleSchemas && !visibleFilterUsesSchemas" variant="outline" class="shrink-0" :disabled="isTesting || isSaving || isLoadingVisibleSchemas || !hasRequiredConnectionTarget" @click="openVisibleSchemasPicker">
+          <Button v-if="canChooseVisibleSchemas && !visibleFilterUsesSchemas && hasVisibleSchemaFilter" variant="outline" class="shrink-0" :disabled="isTesting || isSaving || isLoadingVisibleSchemas || !hasRequiredConnectionTarget" @click="openVisibleSchemasPicker">
             <Loader2 v-if="isLoadingVisibleSchemas" class="mr-1.5 h-4 w-4 animate-spin" />
             <ListFilter v-else class="mr-1.5 h-4 w-4" />
-            {{ hasVisibleSchemaFilter ? visibleSchemaSummary : t("visibleSchemas.showAll") }}
+            {{ visibleSchemaSummary }}
           </Button>
           <Button variant="outline" class="shrink-0" :disabled="isTesting || isSaving" @click="testConnection">
             {{ isTesting ? t("connection.testing") : t("connection.test") }}
