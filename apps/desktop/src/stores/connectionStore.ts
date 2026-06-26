@@ -59,9 +59,11 @@ import { REDIS_SCAN_PAGE_SIZE_DEFAULT } from "@/lib/redisKeyPattern";
 const PINNED_TREE_NODES_STORAGE_KEY = "dbx-pinned-tree-nodes";
 const ACTIVE_CONNECTION_STORAGE_KEY = "dbx-active-connection";
 const CONNECTION_HEALTH_CHECK_TTL_MS = 2000;
+const CONNECTION_HEALTH_CHECK_TIMEOUT_MS = 5000;
 const METADATA_LOAD_MIN_TIMEOUT_MS = 15_000;
 const METADATA_LOAD_DISABLED_QUERY_TIMEOUT_MS = 60_000;
 const DISCONNECT_REQUEST_TIMEOUT_MS = 5_000;
+const DEFAULT_KEEPALIVE_INTERVAL_SECS = 30;
 const MONGO_LEGACY_DRIVER_PROFILE = "mongodb-legacy";
 const MONGO_LEGACY_DRIVER_LABEL = "MongoDB (Legacy)";
 const SUPERSEDED_CONNECTION_ATTEMPT_MESSAGE = "Connection attempt was superseded by a newer attempt";
@@ -304,6 +306,25 @@ export const useConnectionStore = defineStore("connection", () => {
     return Math.max(METADATA_LOAD_MIN_TIMEOUT_MS, boundedTimeoutSecs * 1000);
   }
 
+  async function withConnectionHealthTimeout(connectionId: string, promise: Promise<void>): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            reject(new Error(`Connection health check timed out after ${Math.ceil(CONNECTION_HEALTH_CHECK_TIMEOUT_MS / 1000)}s.`));
+          }, CONNECTION_HEALTH_CHECK_TIMEOUT_MS);
+        }),
+      ]);
+    } catch (error) {
+      clearConnectionNodeLoading(connectionId);
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
   async function withMetadataLoadTimeout<T>(connectionId: string, promise: Promise<T>, label: string): Promise<T> {
     const timeoutMs = metadataLoadTimeoutMs(getConfig(connectionId));
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -486,7 +507,7 @@ export const useConnectionStore = defineStore("connection", () => {
       connect_timeout_secs: config.connect_timeout_secs || 10,
       query_timeout_secs: config.query_timeout_secs ?? 30,
       idle_timeout_secs: config.idle_timeout_secs ?? 60,
-      keepalive_interval_secs: config.keepalive_interval_secs ?? 0,
+      keepalive_interval_secs: config.keepalive_interval_secs ?? DEFAULT_KEEPALIVE_INTERVAL_SECS,
     };
   }
 
@@ -1230,7 +1251,7 @@ export const useConnectionStore = defineStore("connection", () => {
       if (hasRecentConnectionHealthCheck(connectionId)) return;
       // Optimistic: verify backend pool is actually healthy
       try {
-        await api.checkConnectionHealth(connectionId);
+        await withConnectionHealthTimeout(connectionId, api.checkConnectionHealth(connectionId));
         markConnectionHealthChecked(connectionId);
         return;
       } catch {
@@ -1273,6 +1294,7 @@ export const useConnectionStore = defineStore("connection", () => {
         return;
       }
       recordConnectionError(connectionId, e);
+      clearConnectionNodeLoading(connectionId);
       throw e;
     } finally {
       if (connectInFlight.get(connectionId) === connectPromise) {

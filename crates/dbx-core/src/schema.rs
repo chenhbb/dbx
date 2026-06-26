@@ -3186,7 +3186,7 @@ async fn mysql_object_source(
 ) -> Result<String, String> {
     use mysql_async::prelude::*;
     let sql = mysql_object_source_sql(name, kind);
-    let mut conn = pool.get_conn().await.map_err(|e| e.to_string())?;
+    let mut conn = db::mysql::get_conn_with_timeout(pool, db::connection_timeout()).await?;
     let result = conn.query_iter(&sql).await.map_err(|e| e.to_string())?;
     let rows: Vec<mysql_async::Row> = result.collect_and_drop().await.map_err(|e| e.to_string())?;
     let row = rows.first().ok_or("Object source not found")?;
