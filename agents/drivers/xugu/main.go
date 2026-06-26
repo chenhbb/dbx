@@ -37,7 +37,7 @@ WHERE UPPER(s.SCHEMA_NAME) = UPPER(?)
   AND UPPER(t.TABLE_NAME) = UPPER(?)
   AND c.CONS_TYPE = 'P'`
 const xuguListColumnsSQL = `
-SELECT c.COL_NAME, c.TYPE_NAME, c.NOT_NULL, c.DEF_VAL, c.COMMENTS, c.SCALE
+SELECT c.COL_NAME, c.TYPE_NAME, c.NOT_NULL, c.DEF_VAL, c.COMMENTS, c.SCALE, c."VARYING"
 FROM ALL_COLUMNS c
 JOIN ALL_TABLES t ON t.DB_ID = c.DB_ID AND t.TABLE_ID = c.TABLE_ID
 JOIN ALL_SCHEMAS s ON s.DB_ID = t.DB_ID AND s.SCHEMA_ID = t.SCHEMA_ID
@@ -879,6 +879,7 @@ func (s *server) getColumns(schema, table string) ([]columnInfo, error) {
 		var item columnInfo
 		var notNull any
 		var scale *int
+		var varying any
 		if err := rows.Scan(
 			&item.Name,
 			&item.DataType,
@@ -886,9 +887,11 @@ func (s *server) getColumns(schema, table string) ([]columnInfo, error) {
 			&item.ColumnDefault,
 			&item.Comment,
 			&scale,
+			&varying,
 		); err != nil {
 			return nil, err
 		}
+		item.DataType = normalizeXuguColumnType(item.DataType, varying)
 		item.IsNullable = !truthy(notNull)
 		item.IsPrimaryKey = primaryKeys[strings.ToUpper(item.Name)]
 		item.NumericPrecision, item.NumericScale, item.CharacterMaximumLength = decodeXuguScale(item.DataType, scale)
@@ -1644,6 +1647,21 @@ func decodeXuguScale(dataType string, scale *int) (*int, *int, *int) {
 		return &precision, &numericScale, nil
 	}
 	return nil, nil, nil
+}
+
+func normalizeXuguColumnType(dataType string, varying any) string {
+	upper := strings.ToUpper(strings.TrimSpace(dataType))
+	if !truthy(varying) {
+		return dataType
+	}
+	switch upper {
+	case "CHAR":
+		return "VARCHAR"
+	case "BINARY":
+		return "VARBINARY"
+	default:
+		return dataType
+	}
 }
 
 var quotedIdentifierRegexp = regexp.MustCompile(`"([^"]+)"`)
