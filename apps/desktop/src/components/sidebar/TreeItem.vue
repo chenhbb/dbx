@@ -1057,6 +1057,7 @@ async function openData() {
         console.warn("[DBX][openData:metadata:error]", { traceId, tabId, elapsed: elapsed(), error });
       }
     };
+    const shouldRefreshTableMeta = !cachedTableMeta;
     if (cachedTableMeta) {
       console.info("[DBX][openData:metadata:cache-hit]", {
         traceId,
@@ -1067,8 +1068,7 @@ async function openData() {
         elapsed: elapsed(),
       });
     } else {
-      void refreshTableMetaInBackground();
-      logPhase("metadata-started", { tabId });
+      logPhase("metadata-deferred", { tabId });
     }
 
     // Check if superseded by a newer openData call
@@ -1105,6 +1105,10 @@ async function openData() {
     await queryStore.executeTabSql(tabId, sql, { sourceTraceId: traceId, skipEnsureConnected: true });
     console.info("[DBX][openData:execute:done]", { traceId, tabId, elapsed: elapsed() });
     logPhase("execute-tab-sql", { tabId });
+    if (shouldRefreshTableMeta && isCurrentDataTab()) {
+      void refreshTableMetaInBackground();
+      logPhase("metadata-started", { tabId });
+    }
   } catch (e: any) {
     if (!isActive()) {
       logPhase("superseded-after-error", { tabId });
