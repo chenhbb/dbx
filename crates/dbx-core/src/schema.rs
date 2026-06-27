@@ -2626,6 +2626,8 @@ pub async fn list_indexes_core(
                 }
                 if *mode == MysqlMode::OceanBaseOracle {
                     db::ob_oracle::list_indexes(p, schema, table).await
+                } else if db_config.as_ref().is_some_and(is_doris_family_config) {
+                    db::mysql::list_doris_family_indexes(p, mysql_table_metadata_catalog(database, schema), table).await
                 } else {
                     db::mysql::list_indexes(p, mysql_table_metadata_catalog(database, schema), table).await
                 }
