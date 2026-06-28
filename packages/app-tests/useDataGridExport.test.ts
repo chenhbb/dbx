@@ -41,7 +41,7 @@ function installMemoryStorage() {
   };
 }
 
-function buildExportHarness(options: { exportFileBaseName?: string } = {}) {
+function buildExportHarness(options: { currentResultLabel?: string; exportFileBaseName?: string } = {}) {
   const exportProgressDialog = ref(false);
   const exportProgressState = ref({
     title: "",
@@ -106,6 +106,7 @@ function buildExportHarness(options: { exportFileBaseName?: string } = {}) {
     hasRowSelection: computed(() => false),
     fullExportResult,
     queryResultExportRequest,
+    currentResultLabel: computed(() => options.currentResultLabel),
     exportFileBaseName: computed(() => options.exportFileBaseName),
     exportProgressDialog,
     exportProgressState,
@@ -324,6 +325,19 @@ test("selected query result CSV export keeps the existing in-memory path", async
   assert.equal(apiMock.exportQueryResultCsv.mock.calls.length, 1);
   assert.deepEqual(apiMock.exportQueryResultCsv.mock.calls[0][1], ["id", "name"]);
   assert.deepEqual(apiMock.exportQueryResultCsv.mock.calls[0][2], [[1, "Ada"]]);
+});
+
+test("selected query result XLSX export uses the current source label as the sheet name", async () => {
+  const { composable, queryResultExportRequest } = buildExportHarness({ currentResultLabel: "aaa.apis" });
+
+  await composable.exportXlsx([1]);
+
+  assert.equal(queryResultExportRequest.mock.calls.length, 0);
+  assert.equal(apiMock.startQueryResultExport.mock.calls.length, 0);
+  assert.equal(apiMock.exportQueryResultXlsx.mock.calls.length, 1);
+  assert.equal(apiMock.exportQueryResultXlsx.mock.calls[0][1], "aaa.apis");
+  assert.deepEqual(apiMock.exportQueryResultXlsx.mock.calls[0][2], ["id", "name"]);
+  assert.deepEqual(apiMock.exportQueryResultXlsx.mock.calls[0][3], [[1, "Ada"]]);
 });
 
 test("cancelled query result CSV export clears the cancel handler without using the in-memory path", async () => {

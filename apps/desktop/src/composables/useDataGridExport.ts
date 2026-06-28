@@ -49,6 +49,7 @@ export interface UseDataGridExportOptions {
   fullExportResult?: (onProgress?: (info: { rowsExported: number; totalRows: number | null }) => void) => Promise<QueryResult | undefined>;
   queryResultExportRequest?: (options: { exportId: string; filePath: string; format: "csv" | "xlsx" }) => Promise<QueryResultExportRequest | undefined>;
   allExportResults?: ComputedRef<Array<{ sheetName: string; result: QueryResult }> | undefined>;
+  currentResultLabel?: ComputedRef<string | undefined>;
   exportFileBaseName?: ComputedRef<string | undefined>;
   exportProgressDialog?: Ref<boolean>;
   exportProgressState?: Ref<{
@@ -117,6 +118,7 @@ export function useDataGridExport(options: UseDataGridExportOptions) {
     fullExportResult,
     queryResultExportRequest,
     allExportResults,
+    currentResultLabel,
     exportFileBaseName,
     exportProgressDialog,
     exportProgressState,
@@ -147,6 +149,10 @@ export function useDataGridExport(options: UseDataGridExportOptions) {
       columns: columns.value,
       rows: rowsToExport(rowIds).map((item) => item.data),
     };
+  }
+
+  function currentXlsxSheetName(): string {
+    return currentResultLabel?.value || tableMeta.value?.tableName || "Export";
   }
 
   function targetedRows(): RowItem[] {
@@ -715,7 +721,7 @@ export function useDataGridExport(options: UseDataGridExportOptions) {
             totalRows: result.rows.length,
           };
         }
-        await api.exportQueryResultXlsx(outputPath, tableMeta.value?.tableName || "Export", result.columns, result.rows);
+        await api.exportQueryResultXlsx(outputPath, currentXlsxSheetName(), result.columns, result.rows);
         if (needsFullExport && exportProgressState) {
           exportProgressState.value = {
             ...exportProgressState.value,
@@ -752,7 +758,7 @@ export function useDataGridExport(options: UseDataGridExportOptions) {
           outputPath = path as string;
         }
         const result = await resultToExport(undefined, undefined, false);
-        await api.exportQueryResultXlsx(outputPath, tableMeta.value?.tableName || "Export", result.columns, result.rows);
+        await api.exportQueryResultXlsx(outputPath, currentXlsxSheetName(), result.columns, result.rows);
         toast(t("grid.exported"));
       } catch (e: any) {
         toast(t("grid.exportFailed", { message: e?.message || String(e) }), 5000);
