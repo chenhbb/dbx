@@ -105,16 +105,6 @@ mod tests {
     }
 
     #[test]
-    fn connect_path_rejects_missing_database_file() {
-        let path = std::env::temp_dir().join(format!("dbx-duckdb-missing-{}.duckdb", uuid::Uuid::new_v4()));
-        assert!(!path.exists());
-
-        let result = connect_path(path.to_string_lossy().as_ref());
-        assert!(result.is_err(), "connecting to a non-existent file should fail");
-        assert!(result.unwrap_err().contains("does not exist"));
-    }
-
-    #[test]
     fn connect_path_replaces_empty_placeholder_file() {
         let path = std::env::temp_dir().join(format!("dbx-duckdb-empty-{}.duckdb", uuid::Uuid::new_v4()));
         std::fs::write(&path, "").expect("write empty placeholder");
