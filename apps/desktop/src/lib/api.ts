@@ -366,7 +366,9 @@ export const mqRawRequest = forward("mqRawRequest");
 export const mqSendMessage = forward("mqSendMessage");
 
 // MongoDB
+export const documentListDatabases = forward("documentListDatabases");
 export const mongoListDatabases = forward("mongoListDatabases");
+export const documentListCollections = forward("documentListCollections");
 export const mongoListCollections = forward("mongoListCollections");
 export const mongoCreateDatabase = forward("mongoCreateDatabase");
 export const mongoDropDatabase = forward("mongoDropDatabase");
@@ -376,10 +378,13 @@ export const mongoFindDocuments = forward("mongoFindDocuments");
 export const mongoServerVersion = forward("mongoServerVersion");
 export const mongoAggregateDocuments = forward("mongoAggregateDocuments");
 export const mongoCreateIndex = forward("mongoCreateIndex");
+export const documentInsertDocument = forward("documentInsertDocument");
 export const mongoInsertDocument = forward("mongoInsertDocument");
 export const mongoInsertDocuments = forward("mongoInsertDocuments");
+export const documentUpdateDocument = forward("documentUpdateDocument");
 export const mongoUpdateDocument = forward("mongoUpdateDocument");
 export const mongoUpdateDocuments = forward("mongoUpdateDocuments");
+export const documentDeleteDocument = forward("documentDeleteDocument");
 export const mongoDeleteDocument = forward("mongoDeleteDocument");
 export const mongoDeleteDocuments = forward("mongoDeleteDocuments");
 
