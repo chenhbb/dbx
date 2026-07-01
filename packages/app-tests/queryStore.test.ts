@@ -236,6 +236,64 @@ test("marked-clean object source tabs close without unsaved confirmation", () =>
   );
 });
 
+test("close all tabs pauses on unsaved query tabs", () => {
+  setActivePinia(createPinia());
+  const store = useQueryStore();
+  const queryId = store.createTab("conn-1", "db", "draft query");
+  store.updateSql(queryId, "select 1;");
+  const dataId = store.createTab("conn-1", "db", "users", "data");
+
+  store.closeAllTabs();
+
+  assert.equal(store.showCloseConfirm, true);
+  assert.equal(store.pendingCloseTabId, queryId);
+  assert.deepEqual(
+    store.tabs.map((tab) => tab.id),
+    [queryId, dataId],
+  );
+
+  store.forceClosePendingTab();
+
+  assert.equal(store.showCloseConfirm, false);
+  assert.deepEqual(store.tabs, []);
+  assert.equal(store.activeTabId, null);
+});
+
+test("close other tabs pauses on unsaved query tabs before keeping target tab", () => {
+  setActivePinia(createPinia());
+  const store = useQueryStore();
+  const queryId = store.createTab("conn-1", "db", "draft query");
+  store.updateSql(queryId, "select 1;");
+  const dataId = store.createTab("conn-1", "db", "users", "data");
+
+  store.closeOtherTabs(dataId);
+
+  assert.equal(store.showCloseConfirm, true);
+  assert.equal(store.pendingCloseTabId, queryId);
+  assert.deepEqual(
+    store.tabs.map((tab) => tab.id),
+    [queryId, dataId],
+  );
+
+  store.cancelClosePendingTab();
+
+  assert.equal(store.showCloseConfirm, false);
+  assert.deepEqual(
+    store.tabs.map((tab) => tab.id),
+    [queryId, dataId],
+  );
+
+  store.closeOtherTabs(dataId);
+  store.forceClosePendingTab();
+
+  assert.equal(store.showCloseConfirm, false);
+  assert.deepEqual(
+    store.tabs.map((tab) => tab.id),
+    [dataId],
+  );
+  assert.equal(store.activeTabId, dataId);
+});
+
 test("editing query sql preserves the displayed result editability state", () => {
   setActivePinia(createPinia());
   const store = useQueryStore();

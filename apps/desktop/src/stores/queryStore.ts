@@ -5,7 +5,6 @@ import { useI18n } from "vue-i18n";
 import type { DatabaseType, QueryResult, QueryTab, TableInfoTab } from "@/types/database";
 import { orderPinnedFirst } from "@/lib/pinnedItems";
 import { canCancelQueryExecution } from "@/lib/queryExecutionState";
-import { closeAllTabsState, closeOtherTabsState } from "@/lib/tabCloseActions";
 import { buildExplainSql, parseExplainResult, parseDamengExplainText } from "@/lib/explainPlan";
 import { allEditableColumnsWriteable, allPrimaryKeysPresent, analyzeEditableQuery, sourceColumnsForResult, type EditableQueryInfo } from "@/lib/sqlAnalysis";
 import { restoreOpenTabsState, serializeOpenTabs } from "@/lib/openTabsPersistence";
@@ -191,6 +190,8 @@ export const useQueryStore = defineStore("query", () => {
   const activeTabId = ref<string | null>(restored.activeTabId);
   const showCloseConfirm = ref(false);
   const pendingCloseTabId = ref<string | null>(null);
+  const pendingBatchCloseTabIds = ref<string[] | null>(null);
+  const pendingBatchCloseFinalActiveTabId = ref<string | null | undefined>(undefined);
   for (const tab of restored.tabs) {
     if (tab.mode === "data") void deleteTabResultSnapshot(tabResultCacheKey(tab.id));
   }
@@ -797,6 +798,53 @@ export const useQueryStore = defineStore("query", () => {
     if (tab) tab.originalSql = tab.sql;
   }
 
+  function finishPendingBatchClose() {
+    const finalActiveTabId = pendingBatchCloseFinalActiveTabId.value;
+    pendingBatchCloseTabIds.value = null;
+    pendingBatchCloseFinalActiveTabId.value = undefined;
+    if (finalActiveTabId !== undefined) {
+      activeTabId.value = finalActiveTabId && tabs.value.some((tab) => tab.id === finalActiveTabId) ? finalActiveTabId : null;
+    }
+  }
+
+  function continuePendingBatchClose() {
+    const pendingIds = pendingBatchCloseTabIds.value;
+    if (!pendingIds) return;
+
+    const remainingIds = pendingIds.filter((id) => tabs.value.some((tab) => tab.id === id));
+    pendingBatchCloseTabIds.value = remainingIds;
+    if (remainingIds.length === 0) {
+      finishPendingBatchClose();
+      return;
+    }
+
+    const dirtyTab = remainingIds.map((id) => tabs.value.find((tab) => tab.id === id)).find((tab): tab is QueryTab => !!tab && isTabDirty(tab));
+    if (dirtyTab) {
+      // Batch close must pause before dropping dirty query tabs so the existing save/discard dialog can protect unsaved SQL.
+      pendingCloseTabId.value = dirtyTab.id;
+      showCloseConfirm.value = true;
+      return;
+    }
+
+    finishPendingBatchClose();
+    for (const id of remainingIds) closeTab(id, { force: true });
+  }
+
+  function beginBatchClose(ids: string[], finalActiveTabId?: string | null) {
+    const uniqueIds = [...new Set(ids)].filter((id) => tabs.value.some((tab) => tab.id === id));
+    if (uniqueIds.length === 0) return;
+    pendingBatchCloseTabIds.value = uniqueIds;
+    pendingBatchCloseFinalActiveTabId.value = finalActiveTabId;
+    continuePendingBatchClose();
+  }
+
+  function resumePendingBatchCloseAfter(id: string) {
+    const pendingIds = pendingBatchCloseTabIds.value;
+    if (!pendingIds?.includes(id)) return;
+    pendingBatchCloseTabIds.value = pendingIds.filter((pendingId) => pendingId !== id);
+    continuePendingBatchClose();
+  }
+
   function closeTab(id: string, { force = false }: { force?: boolean } = {}) {
     const tab = tabs.value.find((t) => t.id === id);
     if (!tab) return;
@@ -818,6 +866,7 @@ export const useQueryStore = defineStore("query", () => {
     if (activeTabId.value === id) {
       activeTabId.value = tabs.value[Math.min(idx, tabs.value.length - 1)]?.id ?? null;
     }
+    if (force) resumePendingBatchCloseAfter(id);
   }
 
   function forceClosePendingTab() {
@@ -830,6 +879,8 @@ export const useQueryStore = defineStore("query", () => {
   function cancelClosePendingTab() {
     pendingCloseTabId.value = null;
     showCloseConfirm.value = false;
+    pendingBatchCloseTabIds.value = null;
+    pendingBatchCloseFinalActiveTabId.value = undefined;
   }
 
   function saveAndClosePendingTab() {
@@ -841,35 +892,18 @@ export const useQueryStore = defineStore("query", () => {
   }
 
   function closeOtherTabs(id: string) {
-    tabs.value
-      .filter((tab) => tab.id !== id)
-      .forEach((tab) => {
-        clearDataGridPendingSnapshotsForTab(tab.id);
-        if (tab.isExecuting) void cancelTabExecution(tab.id);
-        if (tab.isExplaining) void cancelTabExplain(tab.id);
-        void closeResultSession(tab);
-        void closeClientConnectionSession(tab);
-        clearResultRunSnapshots(tab);
-        clearResultPayload(tab);
-      });
-    const next = closeOtherTabsState(tabs.value, activeTabId.value, id);
-    tabs.value = next.tabs;
-    activeTabId.value = next.activeTabId;
+    if (!tabs.value.some((tab) => tab.id === id)) return;
+    beginBatchClose(
+      tabs.value.filter((tab) => tab.id !== id).map((tab) => tab.id),
+      id,
+    );
   }
 
   function closeAllTabs() {
-    tabs.value.forEach((tab) => {
-      clearDataGridPendingSnapshotsForTab(tab.id);
-      if (tab.isExecuting) void cancelTabExecution(tab.id);
-      if (tab.isExplaining) void cancelTabExplain(tab.id);
-      void closeResultSession(tab);
-      void closeClientConnectionSession(tab);
-      clearResultRunSnapshots(tab);
-      clearResultPayload(tab);
-    });
-    const next = closeAllTabsState(tabs.value, activeTabId.value);
-    tabs.value = next.tabs;
-    activeTabId.value = next.activeTabId;
+    beginBatchClose(
+      tabs.value.map((tab) => tab.id),
+      null,
+    );
   }
 
   function duplicateTab(id: string) {
