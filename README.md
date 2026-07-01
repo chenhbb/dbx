@@ -156,6 +156,8 @@ Add to your `.mcp.json`:
 }
 ```
 
+Windows portable builds need `DBX_DATA_DIR` in the MCP config, pointing to the `data` directory next to `DBX.exe` (the folder that contains `dbx.db`).
+
 Works with Claude Code, Cursor, Windsurf, and any MCP-compatible agent. Supports listing connections, browsing tables, executing SQL, and opening tables directly in DBX's UI.
 
 DBX also provides a dedicated CLI package for terminal, script, and Codex workflows:
