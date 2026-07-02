@@ -4932,12 +4932,11 @@ function treeItemMenuItems(): ContextMenuItem[] {
 <style>
 .sidebar-object-comment {
   color: var(--muted-foreground);
-  font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 16px;
-  opacity: 1;
-  text-rendering: optimizeLegibility;
+  font-size: 10px;
+  line-height: 1rem;
+  opacity: 0.6;
+  /* Sidebar rows repaint on hover; avoid heavier font shaping and fallback here. */
+  text-rendering: auto;
 }
 
 .tree-item-connection-tint {
