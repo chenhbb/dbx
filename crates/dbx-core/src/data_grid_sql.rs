@@ -2427,6 +2427,28 @@ mod tests {
     }
 
     #[test]
+    fn prepares_sqlserver_bigint_update_from_numeric_string() {
+        let result = prepare_data_grid_save(DataGridSaveStatementOptions {
+            database_type: Some(DatabaseType::SqlServer),
+            table_meta: DataGridTableMeta {
+                schema: Some("dbo".to_string()),
+                table_name: "users".to_string(),
+                primary_keys: vec!["Id".to_string()],
+                columns: Some(vec![column("Id", "int", false, None), column("UserId", "bigint", true, None)]),
+            },
+            columns: vec!["Id".to_string(), "UserId".to_string()],
+            source_columns: None,
+            rows: vec![vec![json!(1), json!(142189065666650_i64)]],
+            dirty_rows: vec![(0, vec![(1, json!("144847503924137986"))])],
+            deleted_rows: vec![],
+            new_rows: vec![],
+        });
+
+        assert_eq!(result.validation_error, None);
+        assert_eq!(result.statements, vec!["UPDATE [dbo].[users] SET [UserId] = 144847503924137986 WHERE [Id] = 1;"]);
+    }
+
+    #[test]
     fn prepares_oracle_timestamp_insert_from_iso_grid_value() {
         let result = prepare_data_grid_save(DataGridSaveStatementOptions {
             database_type: Some(DatabaseType::Oracle),
