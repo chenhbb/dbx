@@ -210,7 +210,7 @@ function resetDocumentFilterBuilder() {
 }
 
 function currentDocumentFilter(): string | undefined {
-  return currentDocumentFilterJson(filterInput.value, appliedDocumentFilter.value);
+  return currentDocumentFilterJson(filterInput.value, appliedDocumentFilter.value, documentStoreProvider.value.kind);
 }
 
 const documentQueryPreview = computed(() => {
@@ -230,7 +230,12 @@ const documentQueryPreview = computed(() => {
 });
 
 async function applyDocumentStructuredFilters() {
-  const items = documentFilterRules.value.map((rule) => ({ rule, condition: buildDocumentFilterCondition(rule) })).filter((item): item is { rule: DocumentFilterRule; condition: Record<string, unknown> } => !!item.condition);
+  const items = documentFilterRules.value
+    .map((rule) => ({
+      rule,
+      condition: buildDocumentFilterCondition(rule, { kind: documentStoreProvider.value.kind }),
+    }))
+    .filter((item): item is { rule: DocumentFilterRule; condition: Record<string, unknown> } => !!item.condition);
   const structured = combineDocumentFilterConditions(
     items.map((item) => item.condition),
     items.map((item) => item.rule),
