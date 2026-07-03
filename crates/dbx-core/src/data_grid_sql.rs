@@ -11,7 +11,9 @@ mod data_grid_tdengine_sql;
 use data_grid_tdengine_sql::build_tdengine_data_grid_save_statements;
 
 use crate::models::connection::DatabaseType;
-use crate::sql_dialect::{quote_table_identifier, table_pagination_strategy, TablePaginationStrategy};
+use crate::sql_dialect::{
+    firebird_rows_clause, quote_table_identifier, table_pagination_strategy, TablePaginationStrategy,
+};
 use crate::transfer::{format_ch_array_sql_literal, format_pg_array_sql_literal};
 
 const DBX_ROWID_COLUMN: &str = "__DBX_ROWID";
@@ -496,6 +498,10 @@ pub fn build_data_grid_column_distinct_values_sql(options: DataGridColumnDistinc
         TablePaginationStrategy::SqlServerTop => format!("SELECT TOP ({limit}) {select_list}{from_clause}"),
         TablePaginationStrategy::IrisTop => format!("SELECT TOP {limit} {select_list}{from_clause}"),
         TablePaginationStrategy::InformixFirst => format!("SELECT FIRST {limit} {select_list}{from_clause}"),
+        TablePaginationStrategy::FirebirdRows => {
+            let rows = firebird_rows_clause(limit, 0);
+            format!("SELECT {select_list}{from_clause} {rows}")
+        }
         TablePaginationStrategy::Db2FetchFirst | TablePaginationStrategy::FetchFirst => {
             format!("SELECT {select_list}{from_clause} FETCH FIRST {limit} ROWS ONLY")
         }
@@ -2282,6 +2288,20 @@ mod tests {
                 include_counts: true,
             }),
             "SELECT * FROM (SELECT \"KIND\" AS dbx_value, COUNT(*) AS dbx_count FROM \"APP\".\"EVENTS\" GROUP BY \"KIND\" ORDER BY dbx_count DESC, dbx_value) WHERE ROWNUM <= 10"
+        );
+        assert_eq!(
+            build_data_grid_column_distinct_values_sql(DataGridColumnDistinctValuesSqlOptions {
+                database_type: Some(DatabaseType::Firebird),
+                schema: None,
+                table_name: "USERS".to_string(),
+                column_name: "STATUS".to_string(),
+                column_info: Some(column("STATUS", "varchar(32)", true, None)),
+                where_input: Some("WHERE DELETED_AT IS NULL".to_string()),
+                search_value: None,
+                limit: Some(25),
+                include_counts: false,
+            }),
+            "SELECT \"STATUS\" AS dbx_value FROM \"USERS\" WHERE (DELETED_AT IS NULL) GROUP BY \"STATUS\" ORDER BY dbx_value ROWS 25"
         );
     }
 
