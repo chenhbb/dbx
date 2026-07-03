@@ -1050,6 +1050,11 @@ export default withEnglishFallback({
     newGroupDefault: "Nuevo grupo",
     deleteGroupConfirmTitle: "Eliminar grupo",
     deleteGroupConfirmMessage: '¿Eliminar el grupo "{name}"? Las conexiones dentro serán movidas al nivel superior.',
+    selectConnection: "Seleccionar conexión",
+    deselectConnection: "Deseleccionar conexión",
+    selectAllConnections: "Seleccionar todas las conexiones",
+    deselectAllConnections: "Deseleccionar todas las conexiones",
+    exitMultiSelect: "Salir de selección múltiple",
   },
   databaseSearch: {
     title: "Buscar en base de datos",
