@@ -2666,6 +2666,8 @@ export default withEnglishFallback({
     showExecutionTargetPickerDescription: "啟用後，無選取執行時可在目前語句與全部 SQL 之間臨時選擇。",
     wordWrap: "自動換行",
     wordWrapDescription: "長 SQL 在編輯器寬度內自動折行顯示",
+    vimMode: "Vim 模式",
+    vimModeDescription: "在 SQL 編輯器中使用 Vim 風格的模態編輯",
     sqlSemanticDiagnosticsEnabled: "SQL 語意診斷",
     sqlSemanticDiagnosticsEnabledDescription: "開啟後，編輯器會提示未知資料表、欄位等語意問題；關閉可減少 SQL 解析和中繼資料檢查的效能負擔。",
     confirmDangerousSqlExecution: "執行危險 SQL 前彈出確認",

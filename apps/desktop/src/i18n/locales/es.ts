@@ -2770,6 +2770,8 @@ export default withEnglishFallback({
     showExecutionTargetPickerDescription: "Al activarlo, ejecutar sin selección permite elegir entre la sentencia actual y todo el SQL.",
     wordWrap: "Ajuste de línea",
     wordWrapDescription: "Ajustar las líneas largas de SQL al ancho del editor",
+    vimMode: "Modo Vim",
+    vimModeDescription: "Usar edición modal estilo Vim en el editor SQL",
     sqlSemanticDiagnosticsEnabled: "Diagnóstico semántico de SQL",
     sqlSemanticDiagnosticsEnabledDescription: "Al activarse, el editor informa de problemas semánticos como tablas y columnas desconocidas. Desactívalo para reducir el análisis y las comprobaciones de metadatos en SQL grandes.",
     confirmDangerousSqlExecution: "Confirmar antes de SQL peligroso",

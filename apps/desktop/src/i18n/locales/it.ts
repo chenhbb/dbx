@@ -2768,6 +2768,8 @@ export default withEnglishFallback({
     showExecutionTargetPickerDescription: "Se attivo, l'esecuzione senza selezione permette di scegliere tra istruzione corrente e tutto l'SQL.",
     wordWrap: "A capo automatico",
     wordWrapDescription: "Incolonna le righe SQL lunghe entro la larghezza dell'editor",
+    vimMode: "Modalita Vim",
+    vimModeDescription: "Usa la modifica modale in stile Vim nell'editor SQL",
     sqlSemanticDiagnosticsEnabled: "Diagnostica semantica SQL",
     sqlSemanticDiagnosticsEnabledDescription: "Se abilitata, l'editor segnala problemi semantici come tabelle e colonne sconosciute. Disabilitala per ridurre l'analisi e i controlli dei metadati per file SQL di grandi dimensioni.",
     confirmDangerousSqlExecution: "Conferma prima di SQL pericoloso",
