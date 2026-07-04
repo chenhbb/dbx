@@ -1517,16 +1517,19 @@ function getObjectBrowserMenuItems(item: ObjectBrowserRow): ContextMenuItem[] {
 <template>
   <div ref="rootRef" data-object-browser-root class="flex h-full min-h-0 min-w-0 flex-col bg-background outline-none" tabindex="0" @keydown="onObjectBrowserKeydown">
     <div class="flex h-10 shrink-0 items-center gap-2 border-b px-3">
-      <div class="flex min-w-0 flex-1 items-center gap-2">
-        <Table2 class="h-4 w-4 text-muted-foreground" />
-        <div class="min-w-0 truncate text-sm font-medium">
-          {{ props.database }}<template v-if="selectedSchema"> / {{ selectedSchema }}</template>
-        </div>
-        <div class="shrink-0 rounded border bg-muted/40 px-1.5 py-0.5 text-xs text-muted-foreground">{{ filteredRows.length }} / {{ rows.length }}</div>
+      <div class="flex min-w-0 items-center gap-2">
+        <span class="inline-flex max-w-[14rem] min-w-0 items-center rounded border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium truncate" :title="selectedSchema || props.database">
+          {{ selectedSchema || props.database }}
+        </span>
+        <span v-if="selectedSchema" class="inline-flex max-w-[14rem] min-w-0 items-center rounded border border-border bg-muted/30 px-2 py-0.5 text-xs text-muted-foreground truncate" :title="props.database">
+          {{ props.database }}
+        </span>
       </div>
-      <div class="flex min-w-[240px] flex-1 items-center gap-2">
-        <Search class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        <Input v-model="search" data-object-search-input class="h-7 text-xs" :placeholder="t('objects.search')" @keydown="onSearchKeydown" />
+      <div class="flex min-w-0 flex-1 items-center gap-2">
+        <div class="relative min-w-0 flex-1">
+          <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input v-model="search" data-object-search-input class="h-7 pl-8 text-xs" :placeholder="t('objects.search')" @keydown="onSearchKeydown" />
+        </div>
         <div v-if="showObjectFilter" class="flex h-7 shrink-0 items-center rounded border bg-muted/20 p-0.5">
           <button
             v-for="filter in objectFilters"
