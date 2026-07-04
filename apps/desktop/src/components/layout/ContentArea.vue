@@ -136,7 +136,7 @@ const emit = defineEmits<{
   viewTableData: [tableName: string];
   viewTableDdl: [tableName: string];
   editTableStructure: [tableName: string];
-  openObjectTable: [target: { tableName: string; schema?: string }];
+  openObjectTable: [target: { tableName: string; schema?: string; tableType?: string }];
   objectSchemaChange: [schema: string | undefined];
   structureEditorSaved: [commentChanged: boolean];
   structureEditorClose: [];

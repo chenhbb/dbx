@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DBX_ROWID_COLUMN, canEditExistingTableRows, canUseKeylessRowPredicate, editablePrimaryKeys, editableRowIdentifierColumns, isClickHouseExistingRowReadonlyColumn, isTableDataEditable, supportsDataGridTransaction } from "@/lib/table/tableEditing";
+import { DBX_ROWID_COLUMN, canEditExistingTableRows, canUseKeylessRowPredicate, editablePrimaryKeys, editableRowIdentifierColumns, isClickHouseExistingRowReadonlyColumn, isTableDataEditable, supportsDataGridTransaction, usesSyntheticRowIdKey } from "@/lib/table/tableEditing";
 import type { ColumnInfo, IndexInfo } from "@/types/database";
 
 function column(name: string, isPrimaryKey = false): ColumnInfo {
@@ -31,6 +31,11 @@ describe("tableEditing", () => {
 
   it("treats view data tabs as readonly", () => {
     expect(isTableDataEditable("oracle", [DBX_ROWID_COLUMN], "VIEW")).toBe(false);
+  });
+
+  it("does not include Oracle ROWID for view data tabs", () => {
+    expect(usesSyntheticRowIdKey("oracle", [DBX_ROWID_COLUMN], "VIEW")).toBe(false);
+    expect(usesSyntheticRowIdKey("oracle", [DBX_ROWID_COLUMN], "MATERIALIZED_VIEW")).toBe(false);
   });
 
   it("allows keyless row predicates only for databases that support them", () => {

@@ -30,6 +30,7 @@ const emit = defineEmits<{
       database: string;
       schema?: string;
       tableName: string;
+      tableType?: string;
       columnName?: string;
     },
   ];
@@ -268,6 +269,7 @@ function openItemTarget(item: FieldLineageItem) {
     database: props.prefillDatabase,
     schema: item.schema || props.prefillSchema,
     tableName: item.table,
+    tableType: item.kind === "viewReference" ? "VIEW" : "TABLE",
     columnName: item.column || props.prefillColumn,
   });
 }

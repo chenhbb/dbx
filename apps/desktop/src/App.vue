@@ -1341,6 +1341,7 @@ async function handleQuickOpenSelect(item: any) {
       database: item.database,
       schema: item.schema,
       tableName: item.objectName || item.tableName,
+      tableType: item.type === "view" ? "VIEW" : item.type === "materialized_view" ? "MATERIALIZED_VIEW" : "TABLE",
     });
   } else if (item.type === "procedure" || item.type === "function" || item.type === "sequence" || item.type === "package" || item.type === "package-body") {
     // Open the object source in a source tab
@@ -1857,6 +1858,7 @@ onUnmounted(() => {
                           database: activeTab.database,
                           schema: target.schema,
                           tableName: target.tableName,
+                          tableType: target.tableType,
                         })
                     "
                     @object-schema-change="(schema) => activeTab && queryStore.updateSchema(activeTab.id, schema)"

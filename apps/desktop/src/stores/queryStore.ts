@@ -1687,10 +1687,12 @@ export const useQueryStore = defineStore("query", () => {
         elapsed: elapsed?.(),
       });
       const indexes = await api.listIndexes(tab.connectionId, tab.database, metadataSchema, metadataTableName).catch(() => []);
-      const primaryKeys = editableRowIdentifierColumns(dbType as DatabaseType, columns, indexes);
+      const tableType = tab.tableMeta?.tableType;
+      const primaryKeys = editableRowIdentifierColumns(dbType as DatabaseType, columns, indexes, tableType);
       const tableMeta = {
         schema: metadataSchema || undefined,
         tableName: metadataTableName,
+        tableType,
         columns,
         primaryKeys,
       };

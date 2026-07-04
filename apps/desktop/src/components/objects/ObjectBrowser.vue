@@ -96,7 +96,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  openTable: [target: { tableName: string; schema?: string }];
+  openTable: [target: { tableName: string; schema?: string; tableType?: string }];
   schemaChange: [schema: string | undefined];
 }>();
 
@@ -661,7 +661,7 @@ async function saveFileContent(content: string, defaultFileName: string, filterN
 }
 
 function openViewData(row: ObjectBrowserRow) {
-  emit("openTable", { tableName: row.name, schema: row.schema });
+  emit("openTable", { tableName: row.name, schema: row.schema, tableType: row.type });
 }
 
 function openStructureEditor(row: ObjectBrowserRow) {

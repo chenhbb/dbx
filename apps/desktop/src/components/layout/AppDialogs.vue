@@ -51,6 +51,7 @@ const emit = defineEmits<{
       database: string;
       schema?: string;
       tableName: string;
+      tableType?: string;
       columnName?: string;
     },
   ];
@@ -60,6 +61,7 @@ const emit = defineEmits<{
       database: string;
       schema?: string;
       tableName: string;
+      tableType?: string;
       whereInput?: string;
     },
   ];

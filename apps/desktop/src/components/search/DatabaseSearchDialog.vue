@@ -29,6 +29,7 @@ const emit = defineEmits<{
       database: string;
       schema?: string;
       tableName: string;
+      tableType?: string;
       whereInput?: string;
     },
   ];
@@ -45,6 +46,7 @@ type SearchResultItem = {
   id: string;
   schema?: string;
   tableName: string;
+  tableType?: string;
   matchedColumns: string[];
   preview: string;
   whereInput: string;
@@ -223,6 +225,7 @@ async function searchTable(task: SearchTableTask, databaseType: DatabaseType, cu
         id: `${tableLabel}:${rowIndex}:${results.value.length}`,
         schema: task.schema,
         tableName: task.table.name,
+        tableType: task.table.table_type,
         matchedColumns,
         preview: rowPreview(result.columns, row, matchedColumns),
         whereInput,
@@ -257,6 +260,7 @@ function openResult(item: SearchResultItem) {
     database: props.prefillDatabase,
     schema: item.schema,
     tableName: item.tableName,
+    tableType: item.tableType,
     whereInput: item.whereInput,
   });
 }

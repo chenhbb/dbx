@@ -1283,7 +1283,7 @@ async function openData() {
 
     const columns = cachedTableMeta?.columns ?? [];
     const primaryKeys = cachedTableMeta?.primaryKeys ?? [];
-    const includeRowId = usesSyntheticRowIdKey(effectiveDbType, primaryKeys);
+    const includeRowId = usesSyntheticRowIdKey(effectiveDbType, primaryKeys, tableType);
     const sql = await buildTableSelectSql({
       databaseType: effectiveDbType,
       schema: tableSchema,
