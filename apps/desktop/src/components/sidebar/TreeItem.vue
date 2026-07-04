@@ -58,9 +58,10 @@ import {
   Info,
   Archive,
   Square,
+  X,
 } from "@lucide/vue";
 import CustomContextMenu from "@/components/ui/CustomContextMenu.vue";
-import { useConnectionStore } from "@/stores/connectionStore";
+import { CONNECTION_ATTEMPT_CANCELLED_MESSAGE, useConnectionStore } from "@/stores/connectionStore";
 import { useQueryStore } from "@/stores/queryStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useSavedSqlStore } from "@/stores/savedSqlStore";
@@ -512,8 +513,7 @@ function isTooltipDisabled(): boolean {
 async function toggle() {
   const node = props.node;
   if (node.isLoading) {
-    if (node.type !== "connection") return;
-    node.isLoading = false;
+    return;
   }
   emit("search-toggle", node);
   const wasExpanded = !!node.isExpanded;
@@ -651,6 +651,7 @@ async function toggle() {
   } catch (e: any) {
     if (!wasExpanded) node.isExpanded = false;
     const errMsg = e?.message || String(e);
+    if (errMsg.includes(CONNECTION_ATTEMPT_CANCELLED_MESSAGE)) return;
     toast(t("connection.connectFailed", { message: translateBackendError(t, errMsg) }), 5000);
     if (errMsg.includes("driver is not installed") || errMsg.includes("is not installed")) {
       window.dispatchEvent(new Event("dbx-open-driver-store"));
@@ -3469,6 +3470,16 @@ async function disconnectConnection() {
   }
 }
 
+async function cancelConnectionAttempt() {
+  if (!props.node.connectionId) return;
+  try {
+    const cancelled = await connectionStore.cancelConnecting(props.node.connectionId);
+    if (cancelled) toast(t("connection.connectCancelled"), 2000);
+  } catch (e: any) {
+    toast(t("connection.saveFailed", { message: e?.message || String(e) }), 5000);
+  }
+}
+
 async function closeDatabaseConnection() {
   const node = props.node;
   if (node.type !== "database" || !node.connectionId || node.database == null) return;
@@ -3640,6 +3651,7 @@ const tableComment = computed(() =>
 );
 const paddingLeft = computed(() => treeItemPaddingLeft(props.depth));
 const isConnected = computed(() => props.node.type === "connection" && !!props.node.connectionId && connectionStore.connectedIds.has(props.node.connectionId));
+const isConnecting = computed(() => props.node.type === "connection" && !!props.node.connectionId && connectionStore.connectingIds.has(props.node.connectionId));
 const isConnectionReadonly = computed(() => props.node.type === "connection" && !!props.node.connectionId && (connectionStore.getConfig(props.node.connectionId)?.read_only ?? false));
 const isOpenedDatabase = computed(() => isSidebarDatabaseOpened(props.node, connectionStore.isTreeNodeChildrenLoaded));
 const showsDatabaseOpenIndicator = computed(() => props.node.type === "database" && (isOpenedDatabase.value || (!!props.node.connectionId && props.node.database != null && queryStore.isDatabaseOpen(props.node.connectionId, props.node.database))));
@@ -4095,7 +4107,9 @@ function treeItemMenuItems(): ContextMenuItem[] {
 
   // 2. Connection
   if (node.type === "connection") {
-    if (!isConnected.value) {
+    if (isConnecting.value) {
+      items.push({ label: t("connection.cancelConnecting"), action: cancelConnectionAttempt, icon: X });
+    } else if (!isConnected.value) {
       items.push({ label: t("contextMenu.openConnection"), action: toggle, icon: Plug });
     } else {
       items.push({ label: t("contextMenu.closeConnection"), action: disconnectConnection, icon: Unplug });
@@ -4713,10 +4727,21 @@ function treeItemMenuItems(): ContextMenuItem[] {
           <ConnectionErrorIndicator v-if="node.type === 'connection'" :connection-id="node.connectionId" trigger-class="h-4 w-4" />
           <Pin v-if="isPinned" class="w-3 h-3 shrink-0 text-primary fill-current" aria-hidden="true" />
           <button
+            v-if="isConnecting"
+            type="button"
+            class="ml-auto flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-secondary/45 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            :aria-label="t('connection.cancelConnecting')"
+            :title="t('connection.cancelConnecting')"
+            @mousedown.stop
+            @click.stop="cancelConnectionAttempt"
+          >
+            <X class="h-3 w-3" />
+          </button>
+          <button
             v-if="node.type === 'connection'"
             type="button"
-            class="ml-auto flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground/55 opacity-0 transition-colors transition-opacity hover:bg-secondary/45 hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/sidebar-row:opacity-100"
-            :class="{ 'opacity-100': isConnectionSelectionChecked || connectionStore.connectionMultiSelectActive }"
+            class="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground/55 opacity-0 transition-colors transition-opacity hover:bg-secondary/45 hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/sidebar-row:opacity-100"
+            :class="[{ 'opacity-100': isConnectionSelectionChecked || connectionStore.connectionMultiSelectActive }, isConnecting ? '' : 'ml-auto']"
             :aria-label="isConnectionSelectionChecked ? t('connectionGroup.deselectConnection') : t('connectionGroup.selectConnection')"
             @mousedown.stop
             @click="toggleConnectionMultiSelection"

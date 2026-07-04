@@ -197,16 +197,16 @@ export async function testConnection(config: ConnectionConfig): Promise<string> 
   return post("/api/connection/test", { config });
 }
 
-export async function connectDb(config: ConnectionConfig): Promise<string> {
-  return post("/api/connection/connect", { config });
+export async function connectDb(config: ConnectionConfig, clientAttempt?: number): Promise<string> {
+  return post("/api/connection/connect", { config, clientAttempt });
 }
 
 export async function connectionFinalProxyPort(config: ConnectionConfig): Promise<number> {
   return post("/api/connection/final-proxy-port", { config });
 }
 
-export async function disconnectDb(connectionId: string): Promise<void> {
-  return post("/api/connection/disconnect", { connectionId });
+export async function disconnectDb(connectionId: string, clientAttempt?: number): Promise<void> {
+  return post("/api/connection/disconnect", { connectionId, clientAttempt });
 }
 
 export async function checkConnectionHealth(connectionId: string): Promise<void> {

@@ -413,6 +413,8 @@ export default {
     colorBlue: "Blue",
     colorPurple: "Purple",
     colorCustom: "Custom color",
+    cancelConnecting: "Cancel connecting",
+    connectCancelled: "Connection cancelled",
   },
   editor: {
     pressToExecute: "Press {mod}+Enter to execute",

@@ -405,6 +405,8 @@ export default withEnglishFallback({
     colorBlue: "藍色",
     colorPurple: "紫色",
     colorCustom: "自訂顏色",
+    cancelConnecting: "取消連接",
+    connectCancelled: "連接已取消",
   },
   editor: {
     pressToExecute: "按 {mod}+Enter 執行查詢",

@@ -521,16 +521,16 @@ export async function testConnection(config: ConnectionConfig): Promise<string> 
   return invoke("test_connection", { config });
 }
 
-export async function connectDb(config: ConnectionConfig): Promise<string> {
-  return invoke("connect_db", { config });
+export async function connectDb(config: ConnectionConfig, clientAttempt?: number): Promise<string> {
+  return invoke("connect_db", { config, clientAttempt });
 }
 
 export async function connectionFinalProxyPort(config: ConnectionConfig): Promise<number> {
   return invoke("connection_final_proxy_port", { config });
 }
 
-export async function disconnectDb(connectionId: string): Promise<void> {
-  return invoke("disconnect_db", { connectionId });
+export async function disconnectDb(connectionId: string, clientAttempt?: number): Promise<void> {
+  return invoke("disconnect_db", { connectionId, clientAttempt });
 }
 
 export async function checkConnectionHealth(connectionId: string): Promise<void> {

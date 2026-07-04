@@ -404,6 +404,8 @@ export default withEnglishFallback({
     zookeeperCreateModeEphemeral: "エフェメラル",
     zookeeperCreateModePersistentSequential: "永続順序",
     zookeeperCreateModeEphemeralSequential: "エフェメラル順序",
+    cancelConnecting: "接続をキャンセル",
+    connectCancelled: "接続がキャンセルされました",
   },
   editor: {
     pressToExecute: "{mod}+Enter で実行",

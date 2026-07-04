@@ -174,6 +174,8 @@ interface PersistedTreeChildrenLoadResult {
 
 type BeforeConnectHandler = (config: ConnectionConfig) => Promise<void>;
 
+export const CONNECTION_ATTEMPT_CANCELLED_MESSAGE = "Connection attempt was cancelled";
+
 function redisDbLabel(db: number, _loadedKeyCount?: number, totalKeyCount?: number): string {
   if (totalKeyCount == null) return `db${db}`;
   return `db${db} (${totalKeyCount})`;
@@ -202,6 +204,7 @@ export const useConnectionStore = defineStore("connection", () => {
   let agentDriversRefreshPromise: Promise<void> | null = null;
   const loadedTreeNodeChildrenIds = ref<Set<string>>(new Set());
   const connectionErrors = ref<Record<string, string>>({});
+  const connectingIds = ref<Set<string>>(new Set());
   const editingConnectionId = ref<string | null>(null);
   const newConnectionGroupId = ref<string | null>(null);
   const completionTablesCache = ref<Record<string, SqlCompletionTable[]>>({});
@@ -274,6 +277,11 @@ export const useConnectionStore = defineStore("connection", () => {
   let layoutPersistTimer: ReturnType<typeof setTimeout> | null = null;
   const staleTreeRefreshIds = new Set<string>();
   const connectInFlight = new Map<string, Promise<void>>();
+  const disconnectInFlight = new Map<string, Promise<void>>();
+  const cancelDisconnectInFlight = new Map<string, Promise<void>>();
+  const activeLocalConnectionAttempts = new Map<string, number>();
+  const cancelledLocalConnectionAttempts = new Map<string, Set<number>>();
+  let nextLocalConnectionAttempt = 0;
   let beforeConnectHandler: BeforeConnectHandler | null = null;
   let initFromDiskPromise: Promise<void> | null = null;
 
@@ -307,6 +315,146 @@ export const useConnectionStore = defineStore("connection", () => {
 
   function isSupersededConnectionAttempt(error: unknown): boolean {
     return connectionErrorMessage(error).includes(SUPERSEDED_CONNECTION_ATTEMPT_MESSAGE);
+  }
+
+  function isCancelledConnectionAttempt(error: unknown): boolean {
+    return connectionErrorMessage(error).includes(CONNECTION_ATTEMPT_CANCELLED_MESSAGE);
+  }
+
+  function beginLocalConnectionAttempt(connectionId: string): number {
+    const attempt = ++nextLocalConnectionAttempt;
+    activeLocalConnectionAttempts.set(connectionId, attempt);
+    connectingIds.value.add(connectionId);
+    const node = findNode(treeNodes.value, connectionId);
+    if (node) node.isLoading = true;
+    return attempt;
+  }
+
+  function isCurrentLocalConnectionAttempt(connectionId: string, attempt: number): boolean {
+    return activeLocalConnectionAttempts.get(connectionId) === attempt;
+  }
+
+  function isCancelledLocalConnectionAttempt(connectionId: string, attempt: number): boolean {
+    return cancelledLocalConnectionAttempts.get(connectionId)?.has(attempt) === true;
+  }
+
+  function getLocalConnectionAttempt(connectionId: string): number | undefined {
+    return activeLocalConnectionAttempts.get(connectionId);
+  }
+
+  function finishLocalConnectionAttempt(connectionId: string, attempt: number) {
+    if (isCancelledLocalConnectionAttempt(connectionId, attempt)) {
+      const attempts = cancelledLocalConnectionAttempts.get(connectionId);
+      attempts?.delete(attempt);
+      if (attempts?.size === 0) {
+        cancelledLocalConnectionAttempts.delete(connectionId);
+      }
+    }
+    if (!isCurrentLocalConnectionAttempt(connectionId, attempt)) return;
+    activeLocalConnectionAttempts.delete(connectionId);
+    connectingIds.value.delete(connectionId);
+    clearConnectionNodeLoading(connectionId);
+  }
+
+  function cancelLocalConnectionAttempt(connectionId: string): boolean {
+    const attempt = activeLocalConnectionAttempts.get(connectionId);
+    if (attempt == null) return false;
+    const attempts = cancelledLocalConnectionAttempts.get(connectionId) ?? new Set<number>();
+    attempts.add(attempt);
+    cancelledLocalConnectionAttempts.set(connectionId, attempts);
+    activeLocalConnectionAttempts.delete(connectionId);
+    connectingIds.value.delete(connectionId);
+    clearConnectionNodeLoading(connectionId);
+    connectInFlight.delete(connectionId);
+    return true;
+  }
+
+  function getDisconnectInFlight(connectionId: string): Promise<void> | undefined {
+    return disconnectInFlight.get(connectionId);
+  }
+
+  async function waitForDisconnectInFlight(connectionId: string): Promise<void> {
+    const pending = getDisconnectInFlight(connectionId);
+    if (pending) await pending;
+  }
+
+  function trackDisconnectRequest(connectionId: string, request: Promise<void>): Promise<void> {
+    const tracked = request
+      .catch((error) => {
+        console.warn("[DBX][connection:disconnect-error]", { connectionId, error });
+      })
+      .finally(() => {
+        if (disconnectInFlight.get(connectionId) === tracked) {
+          disconnectInFlight.delete(connectionId);
+        }
+      });
+    disconnectInFlight.set(connectionId, tracked);
+    return withDisconnectRequestTimeout(connectionId, request);
+  }
+
+  function startDisconnectRequest(connectionId: string): Promise<void> {
+    let request: Promise<void>;
+    try {
+      request = api.disconnectDb(connectionId);
+    } catch (error) {
+      request = Promise.reject(error);
+    }
+    return trackDisconnectRequest(connectionId, request);
+  }
+
+  function cancelDisconnectKey(connectionId: string, attempt: number): string {
+    return `${connectionId}:${attempt}`;
+  }
+
+  function startCancelDisconnectRequest(connectionId: string, attempt: number): Promise<void> {
+    const key = cancelDisconnectKey(connectionId, attempt);
+    const existing = cancelDisconnectInFlight.get(key);
+    if (existing) return existing;
+    let request: Promise<void>;
+    try {
+      request = api.disconnectDb(connectionId, attempt);
+    } catch (error) {
+      request = Promise.reject(error);
+    }
+    const tracked = withDisconnectRequestTimeout(connectionId, request)
+      .catch((error) => {
+        console.warn("[DBX][connection:cancel-disconnect-error]", { connectionId, attempt, error });
+        throw error;
+      })
+      .finally(() => {
+        if (cancelDisconnectInFlight.get(key) === tracked) {
+          cancelDisconnectInFlight.delete(key);
+        }
+      });
+    cancelDisconnectInFlight.set(key, tracked);
+    return tracked;
+  }
+
+  async function cleanupResolvedCancelledConnectionAttempt(connectionId: string, attempt: number) {
+    try {
+      // A cancel request can reach the backend before connect_db registers the
+      // attempt, so clean again if that cancelled connect later returns a pool.
+      await withDisconnectRequestTimeout(connectionId, api.disconnectDb(connectionId, attempt));
+    } catch (error) {
+      console.warn("[DBX][connection:cancel-result-cleanup-error]", { connectionId, attempt, error });
+    }
+  }
+
+  async function ensureLocalConnectionAttemptActiveAfterConnectResult(connectionId: string, attempt: number, cleanupConnectionId: string) {
+    if (isCancelledLocalConnectionAttempt(connectionId, attempt)) {
+      await cleanupResolvedCancelledConnectionAttempt(cleanupConnectionId, attempt);
+      throw new Error(CONNECTION_ATTEMPT_CANCELLED_MESSAGE);
+    }
+    ensureLocalConnectionAttemptActive(connectionId, attempt);
+  }
+
+  function ensureLocalConnectionAttemptActive(connectionId: string, attempt: number) {
+    if (isCancelledLocalConnectionAttempt(connectionId, attempt)) {
+      throw new Error(CONNECTION_ATTEMPT_CANCELLED_MESSAGE);
+    }
+    if (!isCurrentLocalConnectionAttempt(connectionId, attempt)) {
+      throw new Error(SUPERSEDED_CONNECTION_ATTEMPT_MESSAGE);
+    }
   }
 
   function setConnectionError(connectionId: string, message: string) {
@@ -442,6 +590,10 @@ export const useConnectionStore = defineStore("connection", () => {
 
   function recordConnectionError(connectionId: string, error: unknown): string {
     const message = connectionErrorMessage(error);
+    if (isCancelledConnectionAttempt(message)) {
+      clearConnectionError(connectionId);
+      return "";
+    }
     setConnectionError(connectionId, message);
     maybeAppendAgentDriverUpdateHint(connectionId, message);
     return message;
@@ -1318,12 +1470,15 @@ export const useConnectionStore = defineStore("connection", () => {
 
   async function connect(config: ConnectionConfig) {
     config = normalizeConnection(config);
-    const pendingNode = findNode(treeNodes.value, config.id);
-    if (pendingNode) pendingNode.isLoading = true;
+    if (getDisconnectInFlight(config.id)) await waitForDisconnectInFlight(config.id);
+    const localAttempt = beginLocalConnectionAttempt(config.id);
     try {
       await beforeConnectHandler?.(config);
-      const id = await withConnectionAttemptTimeout(api.connectDb(config), config);
+      ensureLocalConnectionAttemptActive(config.id, localAttempt);
+      const id = await withConnectionAttemptTimeout(api.connectDb(config, localAttempt), config);
+      await ensureLocalConnectionAttemptActiveAfterConnectResult(config.id, localAttempt, id);
       await syncMongoLegacyDriverFallback(id, config);
+      await ensureLocalConnectionAttemptActiveAfterConnectResult(config.id, localAttempt, id);
       activeConnectionId.value = id;
       connectedIds.value.add(id);
       markConnectionHealthChecked(id);
@@ -1348,17 +1503,41 @@ export const useConnectionStore = defineStore("connection", () => {
       }
       return id;
     } catch (e) {
-      recordConnectionError(config.id, e);
+      if (isCancelledLocalConnectionAttempt(config.id, localAttempt)) {
+        clearConnectionError(config.id);
+        throw new Error(CONNECTION_ATTEMPT_CANCELLED_MESSAGE);
+      }
+      if (isCancelledConnectionAttempt(e) || isSupersededConnectionAttempt(e)) {
+        clearConnectionError(config.id);
+      } else {
+        recordConnectionError(config.id, e);
+      }
       throw e;
     } finally {
-      const node = findNode(treeNodes.value, config.id);
-      if (node) node.isLoading = false;
+      finishLocalConnectionAttempt(config.id, localAttempt);
     }
   }
 
+  async function cancelConnecting(connectionId: string): Promise<boolean> {
+    const localAttempt = getLocalConnectionAttempt(connectionId);
+    if (localAttempt == null) return false;
+    const disconnectRequest = startCancelDisconnectRequest(connectionId, localAttempt);
+    const cancelled = cancelLocalConnectionAttempt(connectionId);
+    if (!cancelled) return false;
+    clearConnectionError(connectionId);
+    connectedIds.value.delete(connectionId);
+    clearConnectionHealthCheck(connectionId);
+    if (activeConnectionId.value === connectionId) activeConnectionId.value = null;
+    invalidateCompletionCache(connectionId);
+    await disconnectRequest;
+    return true;
+  }
+
   async function disconnect(connectionId: string) {
+    const disconnectRequest = startDisconnectRequest(connectionId);
+    cancelLocalConnectionAttempt(connectionId);
     const shouldRemoveOneTimeConnection = getConfig(connectionId)?.one_time === true;
-    await withDisconnectRequestTimeout(connectionId, api.disconnectDb(connectionId));
+    await disconnectRequest;
     clearConnectionError(connectionId);
     const { useQueryStore } = await import("@/stores/queryStore");
     const queryStore = useQueryStore();
@@ -1440,15 +1619,20 @@ export const useConnectionStore = defineStore("connection", () => {
       recordConnectionError(connectionId, error);
       throw error;
     }
+    if (getDisconnectInFlight(connectionId)) await waitForDisconnectInFlight(connectionId);
     const existingConnect = connectInFlight.get(connectionId);
     if (existingConnect) {
       await existingConnect;
       return;
     }
+    const localAttempt = beginLocalConnectionAttempt(connectionId);
     const connectPromise = (async () => {
       await beforeConnectHandler?.(config);
-      await withConnectionAttemptTimeout(api.connectDb(config), config);
+      ensureLocalConnectionAttemptActive(connectionId, localAttempt);
+      const id = await withConnectionAttemptTimeout(api.connectDb(config, localAttempt), config);
+      await ensureLocalConnectionAttemptActiveAfterConnectResult(connectionId, localAttempt, id);
       await syncMongoLegacyDriverFallback(connectionId, config);
+      await ensureLocalConnectionAttemptActiveAfterConnectResult(connectionId, localAttempt, id);
       connectedIds.value.add(connectionId);
       markConnectionHealthChecked(connectionId);
       activeConnectionId.value = connectionId;
@@ -1458,6 +1642,14 @@ export const useConnectionStore = defineStore("connection", () => {
     try {
       await connectPromise;
     } catch (e) {
+      if (isCancelledLocalConnectionAttempt(connectionId, localAttempt)) {
+        clearConnectionError(connectionId);
+        throw new Error(CONNECTION_ATTEMPT_CANCELLED_MESSAGE);
+      }
+      if (isCancelledConnectionAttempt(e)) {
+        clearConnectionError(connectionId);
+        throw e;
+      }
       if (isSupersededConnectionAttempt(e) && connectedIds.value.has(connectionId)) {
         clearConnectionError(connectionId);
         return;
@@ -1469,6 +1661,7 @@ export const useConnectionStore = defineStore("connection", () => {
       if (connectInFlight.get(connectionId) === connectPromise) {
         connectInFlight.delete(connectionId);
       }
+      finishLocalConnectionAttempt(connectionId, localAttempt);
     }
   }
 
@@ -4015,6 +4208,7 @@ export const useConnectionStore = defineStore("connection", () => {
     refreshDatabaseTreeNode,
     refreshObjectListTreeNode,
     connectedIds,
+    connectingIds,
     connectionErrors,
     setConnectionError,
     clearConnectionError,
@@ -4046,6 +4240,7 @@ export const useConnectionStore = defineStore("connection", () => {
     startCreatingConnectionInGroup,
     stopCreatingConnectionInGroup,
     connect,
+    cancelConnecting,
     disconnect,
     closeDatabaseConnection,
     ensureConnected,

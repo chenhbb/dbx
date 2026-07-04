@@ -307,6 +307,8 @@ export default withEnglishFallback({
     editTitle: "编辑连接",
     testSuccess: "连接成功",
     connecting: "正在连接 {name}...",
+    cancelConnecting: "取消连接",
+    connectCancelled: "连接已取消",
     connectSuccess: "已连接 {name}",
     connectFailed: "连接失败：{message}",
     driverNotInstalled: "{driver} 驱动未安装，请在驱动管理器中安装。",

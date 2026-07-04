@@ -406,6 +406,8 @@ export default withEnglishFallback({
     colorBlue: "Azul",
     colorPurple: "Morado",
     colorCustom: "Color personalizado",
+    cancelConnecting: "Cancelar conexión",
+    connectCancelled: "Conexión cancelada",
   },
   editor: {
     pressToExecute: "Presiona {mod}+Enter para ejecutar",
