@@ -4,6 +4,7 @@ import com.dbx.agent.ColumnInfo;
 import com.dbx.agent.ConfiguredJdbcAgent;
 import com.dbx.agent.ConnectParams;
 import com.dbx.agent.DatabaseInfo;
+import com.dbx.agent.DdlBuilder;
 import com.dbx.agent.ForeignKeyInfo;
 import com.dbx.agent.IndexInfo;
 import com.dbx.agent.JdbcAgentProfile;
@@ -17,6 +18,7 @@ import com.dbx.agent.TriggerInfo;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -277,7 +279,7 @@ public final class OceanBaseOracleAgent extends ConfiguredJdbcAgent {
             String owner = normalizeSchema(schema);
             String sql = """
                 SELECT c.COLUMN_NAME, c.DATA_TYPE, c.NULLABLE, c.DATA_PRECISION, c.DATA_SCALE,
-                    c.DATA_LENGTH, c.CHAR_LENGTH, cc.COMMENTS,
+                    c.DATA_LENGTH, c.CHAR_LENGTH, c.DATA_DEFAULT, cc.COMMENTS,
                     CASE WHEN pk.COLUMN_NAME IS NULL THEN 0 ELSE 1 END AS IS_PK
                 FROM ALL_TAB_COLUMNS c
                 LEFT JOIN ALL_COL_COMMENTS cc
@@ -301,6 +303,8 @@ public final class OceanBaseOracleAgent extends ConfiguredJdbcAgent {
                 stmt.setString(4, table);
                 try (ResultSet rs = stmt.executeQuery()) {
                     while (rs.next()) {
+                        // Oracle-compatible DATA_DEFAULT is LONG-like; read it before other metadata fields.
+                        String defaultValue = rs.getString("DATA_DEFAULT");
                         String name = rs.getString("COLUMN_NAME");
                         String baseType = rs.getString("DATA_TYPE");
                         Integer numPrec = intOrNull(rs, "DATA_PRECISION");
@@ -311,7 +315,7 @@ public final class OceanBaseOracleAgent extends ConfiguredJdbcAgent {
                             name,
                             formatDataType(baseType, numPrec, numScale, dataLen, charLen),
                             "Y".equalsIgnoreCase(rs.getString("NULLABLE")),
-                            null,
+                            defaultValue,
                             rs.getInt("IS_PK") == 1,
                             null,
                             rs.getString("COMMENTS"),
@@ -324,6 +328,25 @@ public final class OceanBaseOracleAgent extends ConfiguredJdbcAgent {
             }
             return result;
         });
+    }
+
+    @Override
+    public String getTableDdl(String schema, String table) {
+        List<IndexInfo> indexes;
+        try {
+            indexes = listIndexes(schema, table);
+        } catch (RuntimeException e) {
+            indexes = Collections.emptyList();
+        }
+
+        List<ForeignKeyInfo> foreignKeys;
+        try {
+            foreignKeys = listForeignKeys(schema, table);
+        } catch (RuntimeException e) {
+            foreignKeys = Collections.emptyList();
+        }
+
+        return DdlBuilder.buildTableDdl(schema, table, getColumns(schema, table), indexes, foreignKeys, false, true);
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.dbx.agent.oceanbaseoracle;
 
+import com.dbx.agent.ColumnInfo;
 import com.dbx.agent.ConnectParams;
 import com.dbx.agent.MetadataListConstraints;
 import com.dbx.agent.ObjectInfo;
@@ -116,6 +117,77 @@ class OceanBaseOracleAgentTest {
         Assertions.assertTrue(sql.get(0).contains("ROWNUM <= ?"), sql.get(0));
     }
 
+    @Test
+    void getColumnsIncludesDefaultAndCommentMetadata() {
+        List<String> sql = new ArrayList<>();
+        OceanBaseOracleAgent agent = new OceanBaseOracleAgent();
+        TestSupport.setPrivateConnection(agent, preparedConnection(sql, columnResultSet(
+            new Object[][]{
+                {"DISPLAY_NAME", "VARCHAR2", "Y", null, null, 64, 64, "'anonymous'", "User's display name", 0}
+            }
+        )));
+
+        List<ColumnInfo> columns = agent.getColumns("APP", "USERS");
+
+        Assertions.assertEquals(1, columns.size());
+        ColumnInfo column = columns.get(0);
+        Assertions.assertEquals("DISPLAY_NAME", column.getName());
+        Assertions.assertEquals("VARCHAR2(64)", column.getData_type());
+        Assertions.assertTrue(column.getIs_nullable());
+        Assertions.assertEquals("'anonymous'", column.getColumn_default());
+        Assertions.assertFalse(column.getIs_primary_key());
+        Assertions.assertEquals("User's display name", column.getComment());
+        Assertions.assertEquals(64, column.getCharacter_maximum_length());
+        Assertions.assertTrue(sql.get(0).contains("c.DATA_DEFAULT"), sql.get(0));
+    }
+
+    @Test
+    void tableDdlIncludesDefaultsAndOnlyNonBlankColumnComments() {
+        OceanBaseOracleAgent agent = new OceanBaseOracleAgent();
+        TestSupport.setPrivateConnection(agent, preparedConnection(new ArrayList<>(),
+            resultSet(
+                new String[]{"INDEX_NAME", "COLUMN_NAME", "COLUMN_POSITION", "UNIQUENESS", "CONSTRAINT_TYPE", "INDEX_TYPE"},
+                new Object[][]{}
+            ),
+            resultSet(
+                new String[]{"CONSTRAINT_NAME", "COLUMN_NAME", "TABLE_NAME", "REF_COLUMN_NAME"},
+                new Object[][]{}
+            ),
+            columnResultSet(new Object[][]{
+                {"CREATED_AT", "TIMESTAMP", "N", null, null, null, null, "SYSDATE", "Created timestamp", 0},
+                {"INTERNAL_NOTE", "VARCHAR2", "Y", null, null, 100, 100, null, "   ", 0}
+            })
+        ));
+
+        String ddl = agent.getTableDdl("APP", "AUDIT_LOG");
+
+        Assertions.assertTrue(ddl.contains("\"CREATED_AT\" TIMESTAMP NOT NULL DEFAULT SYSDATE"), ddl);
+        Assertions.assertTrue(
+            ddl.contains("COMMENT ON COLUMN \"APP\".\"AUDIT_LOG\".\"CREATED_AT\" IS 'Created timestamp';"),
+            ddl
+        );
+        Assertions.assertTrue(ddl.contains("\"INTERNAL_NOTE\" VARCHAR2(100)"), ddl);
+        Assertions.assertFalse(ddl.contains("\"INTERNAL_NOTE\" IS"), ddl);
+    }
+
+    private static ResultSet columnResultSet(Object[][] rows) {
+        return resultSet(
+            new String[]{
+                "COLUMN_NAME",
+                "DATA_TYPE",
+                "NULLABLE",
+                "DATA_PRECISION",
+                "DATA_SCALE",
+                "DATA_LENGTH",
+                "CHAR_LENGTH",
+                "DATA_DEFAULT",
+                "COMMENTS",
+                "IS_PK"
+            },
+            rows
+        );
+    }
+
     private static Connection preparedConnection(List<String> sql, ResultSet... resultSets) {
         int[] resultSetIndex = {0};
         PreparedStatement statement = proxy(PreparedStatement.class, (method, args) -> {
@@ -151,6 +223,17 @@ class OceanBaseOracleAgentTest {
                 case "getString":
                     Object value = columnValue(columns, rows[index[0]], args[0]);
                     return value == null ? null : String.valueOf(value);
+                case "getObject":
+                    return columnValue(columns, rows[index[0]], args[0]);
+                case "getInt":
+                    Object intValue = columnValue(columns, rows[index[0]], args[0]);
+                    if (intValue instanceof Number) {
+                        return ((Number) intValue).intValue();
+                    }
+                    if (intValue == null) {
+                        return 0;
+                    }
+                    return Integer.parseInt(String.valueOf(intValue));
                 case "close":
                     return null;
                 default:
