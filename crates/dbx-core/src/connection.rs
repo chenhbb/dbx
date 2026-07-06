@@ -1164,16 +1164,7 @@ impl AppState {
                 PoolKind::VectorDb(client)
             }
             DatabaseType::InfluxDb => {
-                let username = if db_config.username.is_empty() { None } else { Some(db_config.username.clone()) };
-                let password = if db_config.password.is_empty() { None } else { Some(db_config.password.clone()) };
-                let client = db::influxdb_driver::InfluxdbClient::new_with_ca_cert(
-                    &url,
-                    username,
-                    password,
-                    db_config.url_params.clone(),
-                    Some(&db_config.ca_cert_path),
-                    connect_timeout,
-                )?;
+                let client = db::influxdb_driver::InfluxdbClient::new_for_config(&url, &db_config, connect_timeout)?;
                 db::influxdb_driver::test_connection(&client, connect_timeout).await?;
                 PoolKind::InfluxDb(client)
             }
