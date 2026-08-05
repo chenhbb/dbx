@@ -192,10 +192,9 @@ public final class InformixAgent extends AbstractJdbcAgent {
     }
 
     static String schemaCatalogSql() {
-        // Informix schemas are object owners. Include routine-only owners because
-        // the same sidebar node also exposes procedures and functions.
-        return "SELECT owner FROM systables WHERE tabid >= 100 AND owner IS NOT NULL "
-                + "UNION SELECT owner FROM sysprocedures WHERE owner IS NOT NULL ORDER BY owner";
+        // Schema nodes are used to browse tables and views. Routine-only owners
+        // would create nodes whose table group is always empty.
+        return "SELECT DISTINCT owner FROM systables WHERE tabid >= 100 AND owner IS NOT NULL ORDER BY owner";
     }
 
     static List<String> normalizeSchemaOwners(List<String> catalogOwners) {
